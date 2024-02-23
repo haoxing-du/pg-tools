@@ -6,6 +6,15 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+)
+import time
 # %%
 url = "https://www.xcontest.org/2022/world/en/flights/#flights[sort]=reg@filter[country]=US@flights[start]=100"
 
@@ -62,7 +71,9 @@ class XContestEntry():
         return f"Pilot: {self.pilot}\nDate: {self.date}\nTime: {self.time}\nUTC Offset: {self.utc_offset}\nCountry: {self.country}\nDistance: {self.distance}\nDuration: {self.duration}\nLaunch: {self.launch}\nPoints: {self.points}\nURL: {self.url}"
     
 def get_xcontest_soup(url: str) -> BeautifulSoup:
-    driver = webdriver.Chrome()
+    options = Options()
+    options.add_argument("--headless=new")
+    driver = webdriver.Chrome(options=options)
     driver.get(url)
 
     # Wait for the actual list to load
@@ -83,4 +94,62 @@ def get_xcontest_entries(url: str) -> list[XContestEntry]:
 
 # %%
 entries = get_xcontest_entries(url)
+# %%
+url_template = "https://www.xcontest.org/{year}/world/en/flights/#filter[date]={year}-{month}-{day}@filter[country]=US@filter[date]={year}-{month}-{day}@filter[country]=US@flights[sort]=reg"
+
+years = [2023, 2022, 2021, 2020, 2019]
+months = [i for i in range(1, 13)]
+days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+# %%
+# sequential version
+
+all_entries = []
+
+start = time.time()
+for year in years[:1]:
+    for month in months[:1]:
+        for day in range(1, days[month-1]+1)[:15]:
+            url = url_template.format(year=year, month=month, day=day)
+            entries = get_xcontest_entries(url)
+            all_entries.extend(entries)
+            print(f"Year: {year}, Month: {month}, Day: {day}, Entries: {len(entries)}")
+end = time.time()
+print(f"Time: {end - start}")
+
+len(all_entries)
+# %%
+# concurrent version
+
+def fetch_entries(date: tuple[int, int, int]) -> list[XContestEntry]:
+    year, month, day = date
+    url = url_template.format(year=year, month=month, day=day)
+    entries = get_xcontest_entries(url)
+    print(f"Year: {year}, Month: {month}, Day: {day}, Entries: {len(entries)}")
+    return entries
+
+all_dates = [(year, month, day) 
+             for year in years 
+             for month in months 
+             for day in range(1, days[month-1]+1)
+]
+
+start = time.time()
+all_entries = []
+with ThreadPoolExecutor(max_workers=20) as e:
+    futures = [e.submit(fetch_entries, date) for date in all_dates[:20]]
+    for future in as_completed(futures):
+        all_entries.extend(future.result())
+end = time.time()
+print(f"Time: {end - start}")
+# %%
+df = pd.DataFrame([entry.__dict__ for entry in all_entries])
+# %%
+# add a month and day column
+df["month"] = df["date"].apply(lambda x: x.split(".")[1])
+df["day"] = df["date"].apply(lambda x: x.split(".")[0])
+df
+# %%
+# plot distribution of flights by month
+df["month"].value_counts().sort_index().plot(kind="bar")
 # %%
