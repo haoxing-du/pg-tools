@@ -96,13 +96,30 @@ def get_xcontest_entries(url: str) -> list[XContestEntry]:
 entries = get_xcontest_entries(url)
 # %%
 # for previous xcontests
-url_template = "https://www.xcontest.org/{year}/world/en/flights/#flights[sort]=reg[start]@filter[date]={year}-{month}-{day}@filter[country]=US@flights[start]=0"
+# url_template = "https://www.xcontest.org/{year}/world/en/flights/#flights[sort]=reg[start]@filter[date]={year}-{month}-{day}@filter[country]=US@flights[start]=0"
 # for 2024 xcontest (starting oct 2023)
-url_template = "https://www.xcontest.org/world/en/flights/#flights[sort]=reg[start]@filter[date]={year}-{month}-{day}@filter[country]=US@flights[start]=0"
+# url_template = "https://www.xcontest.org/world/en/flights/#flights[sort]=reg[start]@filter[date]={year}-{month}-{day}@filter[country]=US@flights[start]=0"
+
+# overall
+url_template = "https://www.xcontest.org/{prefix}world/en/flights/#flights[sort]=reg[start]@filter[date]={year}-{month}-{day}@filter[country]=US@flights[start]=0"
+
+prefixes = {}
 
 years = [2023, 2022, 2021, 2020, 2019]
 months = [i for i in range(1, 13)]
 days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+for year in years:
+    for month in months:
+        if year != 2023:
+            if month < 10:
+                prefixes[(year, month)] = f"{year}/"
+            else:
+                prefixes[(year, month)] = f"{year + 1}/"
+        else:
+            if month < 10:
+                prefixes[(year, month)] = f"{year}/"
+            else:
+                prefixes[(year, month)] = f""
 
 # %%
 # sequential version
