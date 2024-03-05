@@ -95,7 +95,10 @@ def get_xcontest_entries(url: str) -> list[XContestEntry]:
 # %%
 entries = get_xcontest_entries(url)
 # %%
-url_template = "https://www.xcontest.org/{year}/world/en/flights/#filter[date]={year}-{month}-{day}@filter[country]=US@filter[date]={year}-{month}-{day}@filter[country]=US@flights[sort]=reg"
+# for previous xcontests
+url_template = "https://www.xcontest.org/{year}/world/en/flights/#flights[sort]=reg[start]@filter[date]={year}-{month}-{day}@filter[country]=US@flights[start]=0"
+# for 2024 xcontest (starting oct 2023)
+url_template = "https://www.xcontest.org/world/en/flights/#flights[sort]=reg[start]@filter[date]={year}-{month}-{day}@filter[country]=US@flights[start]=0"
 
 years = [2023, 2022, 2021, 2020, 2019]
 months = [i for i in range(1, 13)]
@@ -137,9 +140,13 @@ all_dates = [(year, month, day)
 start = time.time()
 all_entries = []
 with ThreadPoolExecutor(max_workers=20) as e:
-    futures = [e.submit(fetch_entries, date) for date in all_dates[:20]]
+    futures = [e.submit(fetch_entries, date) for date in all_dates]
     for future in as_completed(futures):
-        all_entries.extend(future.result())
+        try:
+            result = future.result()
+            all_entries.extend(result)
+        except Exception as e:
+            print(f"An exception occurred: {e}")
 end = time.time()
 print(f"Time: {end - start}")
 # %%
@@ -148,8 +155,21 @@ df = pd.DataFrame([entry.__dict__ for entry in all_entries])
 # add a month and day column
 df["month"] = df["date"].apply(lambda x: x.split(".")[1])
 df["day"] = df["date"].apply(lambda x: x.split(".")[0])
-df
+df["year"] = df["date"].apply(lambda x: x.split(".")[2])
 # %%
 # plot distribution of flights by month
 df["month"].value_counts().sort_index().plot(kind="bar")
 # %%
+# save
+df.to_csv('xcontest_data.csv', index=False)  # Set index=False if you don't want to save the index.
+
+# %%
+# load
+df = pd.read_csv('xcontest_data.csv')
+# %%
+# get top 15 launches by count for each month
+top_launches_by_month = df.groupby(["month", "launch"]).size().groupby(level=0, group_keys=False).nlargest(15)
+for month, group in top_launches_by_month.groupby(level=0):
+    print(month)
+    print(group)
+    print()
