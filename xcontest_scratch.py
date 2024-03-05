@@ -140,33 +140,59 @@ print(f"Time: {end - start}")
 len(all_entries)
 # %%
 # concurrent version
-
 def fetch_entries(date: tuple[int, int, int]) -> list[XContestEntry]:
     year, month, day = date
-    url = url_template.format(year=year, month=month, day=day)
+    url = url_template.format(year=year, month=month, day=day, prefix=prefixes[(year, month)])
     entries = get_xcontest_entries(url)
     print(f"Year: {year}, Month: {month}, Day: {day}, Entries: {len(entries)}")
     return entries
 
+def scrape_xcontest(dates: list[tuple[int, int, int]]):
+    to_retry = []
+    entries = []
+    future_to_date = {}
+    with ThreadPoolExecutor(max_workers=16) as e:
+        for date in dates:
+            future = e.submit(fetch_entries, date)
+            future_to_date[future] = date
+            
+        for future in as_completed(future_to_date):
+            date = future_to_date[future]
+            try:
+                result = future.result()
+                entries.extend(result)
+                if len(result) == 100:
+                    to_retry.append((date, "Too many entries"))
+                if len(result) == 0:
+                    to_retry.append((date, "No entries"))
+            except Exception as e:
+                print(f"An exception occurred for date {date}: {e}")
+                to_retry.append((date, "Crashed"))  # Append the input date for retry
+    return entries, to_retry
+
+# %%
 all_dates = [(year, month, day) 
              for year in years 
              for month in months 
              for day in range(1, days[month-1]+1)
 ]
-
 start = time.time()
-all_entries = []
-with ThreadPoolExecutor(max_workers=20) as e:
-    futures = [e.submit(fetch_entries, date) for date in all_dates]
-    for future in as_completed(futures):
-        try:
-            result = future.result()
-            all_entries.extend(result)
-        except Exception as e:
-            print(f"An exception occurred: {e}")
+all_entries, to_retry = scrape_xcontest(all_dates)
 end = time.time()
-print(f"Time: {end - start}")
+print(f"Time: {(end - start)/60} minutes")
+
 # %%
+# retry ones that crashed
+old_to_retry = []
+while to_retry:
+    old_to_retry = old_to_retry.extend(to_retry)
+    retry_dates = [date for date, reason in to_retry if reason == "Crashed"]
+    new_entries, to_retry = scrape_xcontest(retry_dates)
+    all_entries.extend(new_entries)
+    print(f"{len(retry_dates)} remaining dates need to be retried")
+
+# %%
+all_entries = list(set(all_entries))
 df = pd.DataFrame([entry.__dict__ for entry in all_entries])
 # %%
 # add a month and day column
@@ -176,6 +202,9 @@ df["year"] = df["date"].apply(lambda x: x.split(".")[2])
 # %%
 # plot distribution of flights by month
 df["month"].value_counts().sort_index().plot(kind="bar")
+
+# %%
+df["year"].value_counts().sort_index().plot(kind="bar")
 # %%
 # save
 df.to_csv('xcontest_data.csv', index=False)  # Set index=False if you don't want to save the index.
