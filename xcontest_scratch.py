@@ -140,7 +140,7 @@ print(f"Time: {end - start}")
 len(all_entries)
 # %%
 # concurrent version
-def fetch_entries(date: tuple[int, int, int]) -> list[XContestEntry]:
+def get_entries_from_date(date: tuple[int, int, int]) -> list[XContestEntry]:
     year, month, day = date
     url = url_template.format(year=year, month=month, day=day, prefix=prefixes[(year, month)])
     entries = get_xcontest_entries(url)
@@ -153,7 +153,7 @@ def scrape_xcontest(dates: list[tuple[int, int, int]]):
     future_to_date = {}
     with ThreadPoolExecutor(max_workers=16) as e:
         for date in dates:
-            future = e.submit(fetch_entries, date)
+            future = e.submit(get_entries_from_date, date)
             future_to_date[future] = date
             
         for future in as_completed(future_to_date):
@@ -207,11 +207,11 @@ df["month"].value_counts().sort_index().plot(kind="bar")
 df["year"].value_counts().sort_index().plot(kind="bar")
 # %%
 # save
-df.to_csv('xcontest_data.csv', index=False)  # Set index=False if you don't want to save the index.
+df.to_csv('data/xcontest_data.csv', index=False)  # Set index=False if you don't want to save the index.
 
 # %%
 # load
-df = pd.read_csv('xcontest_data.csv')
+df = pd.read_csv('data/xcontest_data.csv')
 # %%
 # get top 15 launches by count for each month
 top_launches_by_month = df.groupby(["month", "launch"]).size().groupby(level=0, group_keys=False).nlargest(15)
